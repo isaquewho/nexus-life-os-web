@@ -8,6 +8,7 @@ export const ProfileSchema = z.object({
   full_name: z.string().nullable(),
   avatar_url: z.string().nullable(),
   total_xp: z.number().default(0),
+  onboarding_complete: z.boolean().default(false),
   created_at: z.string(),
 });
 export type Profile = z.infer<typeof ProfileSchema>;
@@ -37,7 +38,6 @@ export const TransactionLayerSchema = z.enum([
   "fixed",
   "extra",
   "variable",
-  "bank",
 ]);
 export type TransactionLayer = z.infer<typeof TransactionLayerSchema>;
 
@@ -51,20 +51,14 @@ export const TransactionSchema = z.object({
   date: z.string(),
   source: z.string().default("manual"),
   transaction_layer: TransactionLayerSchema.default("variable"),
+  is_recurring: z.boolean().default(false),
+  recurring_day: z.number().nullable().optional(),
+  last_generated: z.string().nullable().optional(),
   created_at: z.string(),
 });
 export type Transaction = z.infer<typeof TransactionSchema>;
 
-export const BankConnectionSchema = z.object({
-  id: z.string().uuid(),
-  uid: z.string().uuid(),
-  item_id: z.string(),
-  bank_name: z.string(),
-  bank_logo: z.string().nullable(),
-  last_sync: z.string().nullable(),
-  status: z.string().default("active"),
-});
-export type BankConnection = z.infer<typeof BankConnectionSchema>;
+
 
 // ─── Habits ───────────────────────────────────────────────────────────────────
 

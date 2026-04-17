@@ -1,0 +1,50 @@
+{
+  "name": "NEXUS LIFE OS",
+  "short_name": "NEXUS",
+  "description": "Seu sistema operacional pessoal — Finanças, Hábitos e Metas",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060612",
+  "theme_color": "#060612",
+  "lang": "pt-BR",
+  "categories": ["finance", "productivity", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/pt-BR",
+      "description": "Ver resumo"
+    },
+    {
+      "name": "Atlas",
+      "url": "/pt-BR/atlas",
+      "description": "Falar com Atlas"
+    },
+    {
+      "name": "Finanças",
+      "url": "/pt-BR/finance",
+      "description": "Ver finanças"
+    }
+  ]
+}

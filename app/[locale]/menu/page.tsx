@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import GlassCard from "@/components/ui/GlassCard";
 import NexusButton from "@/components/ui/NexusButton";
 import { formatCurrency, formatDateKey } from "@/lib/utils";
-import { LogOut, Settings, Building2, Globe, User, Wallet, Target, Trophy, Star } from "lucide-react";
+import { LogOut, Settings, Globe, Wallet, Target, Trophy, Star } from "lucide-react";
 import Link from "next/link";
 
 const LANGUAGES = [
@@ -31,7 +31,6 @@ export default function MenuPage() {
   const { habits, logs } = useHabitStore();
   const { goals } = useGoalStore();
   const financeStore = useFinanceStore();
-  const { bankConnections } = useFinanceStore();
 
   const [showLogout, setShowLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -139,9 +138,6 @@ export default function MenuPage() {
         </div>
       </GlassCard>
 
-      {/* Settings Links */}
-      <GlassCard padding="md" className="mb-4">
-        <div className="flex flex-col gap-1">
           <Link
             href={`/${locale}/finance/config`}
             className="flex items-center gap-3 px-3 py-3 rounded-xl transition-all hover:bg-white/5"
@@ -150,13 +146,6 @@ export default function MenuPage() {
             <span className="text-primary text-sm">{t("financeConfig")}</span>
             <span className="ml-auto text-muted">→</span>
           </Link>
-          <div className="flex items-center gap-3 px-3 py-3 rounded-xl">
-            <Building2 size={16} className="text-secondary" />
-            <span className="text-primary text-sm">{t("connectedBanks")}</span>
-            <span className="ml-auto text-muted text-xs">{bankConnections.length} banc.</span>
-          </div>
-        </div>
-      </GlassCard>
 
       {/* Logout */}
       <NexusButton

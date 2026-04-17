@@ -138,7 +138,7 @@ export default function AtlasPage() {
         });
         // Refresh store
         const newTransactions = [
-          { id: crypto.randomUUID(), uid, description: intent.description, amount: intent.amount, category: intent.category, type: "expense" as const, date: new Date().toISOString().split("T")[0], source: "atlas", transaction_layer: "variable" as const, created_at: new Date().toISOString() },
+          { id: crypto.randomUUID(), uid, description: intent.description, amount: intent.amount, category: intent.category, type: "expense" as const, date: new Date().toISOString().split("T")[0], source: "atlas", transaction_layer: "variable" as const, is_recurring: false, created_at: new Date().toISOString() },
           ...financeStore.transactions,
         ];
         financeStore.setTransactions(newTransactions);
@@ -162,7 +162,7 @@ export default function AtlasPage() {
           transaction_layer: "extra",
         });
         const newTransactions = [
-          { id: crypto.randomUUID(), uid, description: intent.description, amount: intent.amount, category: "outros", type: "income" as const, date: new Date().toISOString().split("T")[0], source: "atlas", transaction_layer: "extra" as const, created_at: new Date().toISOString() },
+          { id: crypto.randomUUID(), uid, description: intent.description, amount: intent.amount, category: "outros", type: "income" as const, date: new Date().toISOString().split("T")[0], source: "atlas", transaction_layer: "extra" as const, is_recurring: false, created_at: new Date().toISOString() },
           ...financeStore.transactions,
         ];
         financeStore.setTransactions(newTransactions);

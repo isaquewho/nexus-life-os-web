@@ -4,7 +4,6 @@ import type {
   FinancialConfig,
   FixedExpense,
   Transaction,
-  BankConnection,
   FinanceSummary,
 } from "@/types";
 
@@ -12,12 +11,10 @@ interface FinanceState {
   config: FinancialConfig | null;
   fixedExpenses: FixedExpense[];
   transactions: Transaction[];
-  bankConnections: BankConnection[];
   isLoading: boolean;
   setConfig: (config: FinancialConfig | null) => void;
   setFixedExpenses: (expenses: FixedExpense[]) => void;
   setTransactions: (transactions: Transaction[]) => void;
-  setBankConnections: (connections: BankConnection[]) => void;
   setLoading: (loading: boolean) => void;
   getSummary: () => FinanceSummary;
 }
@@ -26,12 +23,10 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   config: null,
   fixedExpenses: [],
   transactions: [],
-  bankConnections: [],
   isLoading: false,
   setConfig: (config) => set({ config }),
   setFixedExpenses: (fixedExpenses) => set({ fixedExpenses }),
   setTransactions: (transactions) => set({ transactions }),
-  setBankConnections: (bankConnections) => set({ bankConnections }),
   setLoading: (isLoading) => set({ isLoading }),
   getSummary: (): FinanceSummary => {
     const { config, fixedExpenses, transactions } = get();

@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/stores/authStore";
+import { generateRecurringTransactions } from "@/lib/recurring";
 import Sidebar from "./Sidebar";
 import BottomNav from "./BottomNav";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/onboarding"];
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -15,7 +16,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { setProfile, setLoading } = useAuthStore();
   const [ready, setReady] = useState(false);
 
-  // Determine if the current path is a public (login) path
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname.includes(p));
 
   useEffect(() => {
@@ -29,27 +29,47 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           setProfile(null);
           setLoading(false);
           if (!isPublicPath) {
-            // Navigate to login with the current locale
             const localePart = pathname.split("/")[1] || "pt-BR";
             router.replace(`/${localePart}/login`);
             return;
           }
         } else {
+          const uid = session.user.id;
+          const localePart = pathname.split("/")[1] || "pt-BR";
+
           // Load profile
           const { data: profile } = await supabase
             .from("profiles")
             .select("*")
-            .eq("id", session.user.id)
+            .eq("id", uid)
             .single();
 
           setProfile(profile);
           setLoading(false);
 
           if (isPublicPath) {
-            const localePart = pathname.split("/")[1] || "pt-BR";
+            // If logged in but on onboarding path, let them stay
+            if (pathname.includes("/onboarding")) {
+              setReady(true);
+              return;
+            }
+            // If logged in on login page, redirect to dashboard or onboarding
+            if (profile?.onboarding_complete === false || profile?.onboarding_complete === null) {
+              router.replace(`/${localePart}/onboarding`);
+              return;
+            }
             router.replace(`/${localePart}`);
             return;
           }
+
+          // Redirect to onboarding if not complete
+          if (profile?.onboarding_complete === false || profile?.onboarding_complete === null) {
+            router.replace(`/${localePart}/onboarding`);
+            return;
+          }
+
+          // Generate recurring transactions in background (no await to not block UI)
+          generateRecurringTransactions(uid).catch(console.error);
         }
       } catch {
         setLoading(false);
@@ -62,14 +82,20 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === "SIGNED_IN" && session) {
+          const uid = session.user.id;
+          const localePart = pathname.split("/")[1] || "pt-BR";
+
           const { data: profile } = await supabase
             .from("profiles")
             .select("*")
-            .eq("id", session.user.id)
+            .eq("id", uid)
             .single();
+
           setProfile(profile);
-          if (isPublicPath) {
-            const localePart = pathname.split("/")[1] || "pt-BR";
+
+          if (profile?.onboarding_complete === false || profile?.onboarding_complete === null) {
+            router.replace(`/${localePart}/onboarding`);
+          } else {
             router.replace(`/${localePart}`);
           }
         } else if (event === "SIGNED_OUT") {
@@ -83,6 +109,11 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // On onboarding page, render without sidebar/nav
+  if (pathname.includes("/onboarding")) {
+    return <>{children}</>;
+  }
 
   // Always render on public paths
   if (isPublicPath) {

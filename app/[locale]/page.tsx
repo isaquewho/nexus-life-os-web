@@ -9,9 +9,10 @@ import { useGoalStore } from "@/stores/goalStore";
 import { createClient } from "@/lib/supabase/client";
 import GlassCard from "@/components/ui/GlassCard";
 import { formatCurrency, formatDate, formatDateKey, getDayGreeting } from "@/lib/utils";
-import { Wallet, Target, Trophy, TrendingUp, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Wallet, Target, Trophy, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import HealthScore from "@/components/dashboard/HealthScore";
 
 export default function DashboardPage() {
   const t = useTranslations("dashboard");
@@ -90,6 +91,9 @@ export default function DashboardPage() {
           </span>
         </h1>
       </div>
+
+      {/* Health Score */}
+      <HealthScore className="mb-6 animate-fade-in" />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 gap-3 mb-6">
