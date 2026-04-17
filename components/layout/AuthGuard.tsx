@@ -38,11 +38,28 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           const localePart = pathname.split("/")[1] || "pt-BR";
 
           // Load profile
-          const { data: profile } = await supabase
+          let { data: profile } = await supabase
             .from("profiles")
             .select("*")
             .eq("id", uid)
             .single();
+
+          // Auto-create profile if it doesn't exist yet (first login after signUp)
+          if (!profile) {
+            const { data: newProfile } = await supabase
+              .from("profiles")
+              .insert({
+                id: uid,
+                email: session.user.email ?? "",
+                full_name: null,
+                total_xp: 0,
+                onboarding_complete: false,
+                created_at: new Date().toISOString(),
+              })
+              .select()
+              .single();
+            profile = newProfile;
+          }
 
           setProfile(profile);
           setLoading(false);

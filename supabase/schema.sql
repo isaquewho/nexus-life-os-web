@@ -53,6 +53,32 @@ alter table profiles
   add column if not exists onboarding_complete boolean default false;
 
 -- ──────────────────────────────────────────────────
+-- 5. Invite codes (usado no registro com código)
+-- ──────────────────────────────────────────────────
+create table if not exists invite_codes (
+  id        uuid default gen_random_uuid() primary key,
+  code      text unique not null,
+  is_active boolean default true,
+  max_uses  int default 1,
+  use_count int default 0,
+  created_at timestamp default now()
+);
+
+alter table invite_codes enable row level security;
+
+-- Qualquer um pode ler (para validar código no cadastro)
+create policy if not exists "public can validate invite codes"
+  on invite_codes for select using (true);
+
+-- Usuários autenticados podem criar novos códigos
+create policy if not exists "auth users can create invite codes"
+  on invite_codes for insert with check (auth.role() = 'authenticated');
+
+-- Usuários autenticados podem marcar código como usado
+create policy if not exists "auth users can use invite codes"
+  on invite_codes for update using (auth.role() = 'authenticated');
+
+-- ──────────────────────────────────────────────────
 -- 5. Enable RLS
 -- ──────────────────────────────────────────────────
 alter table financial_config enable row level security;

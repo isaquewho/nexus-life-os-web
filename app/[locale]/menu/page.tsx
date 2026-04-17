@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/client";
 import GlassCard from "@/components/ui/GlassCard";
 import NexusButton from "@/components/ui/NexusButton";
 import { formatCurrency, formatDateKey } from "@/lib/utils";
-import { LogOut, Settings, Globe, Wallet, Target, Trophy, Star } from "lucide-react";
+import { LogOut, Settings, Globe, Wallet, Target, Trophy, Star, UserPlus, Copy, Check } from "lucide-react";
 import Link from "next/link";
 
 const LANGUAGES = [
@@ -34,6 +34,34 @@ export default function MenuPage() {
 
   const [showLogout, setShowLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const [generatingInvite, setGeneratingInvite] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const generateInviteCode = async () => {
+    setGeneratingInvite(true);
+    try {
+      const supabase = createClient();
+      const code = "NEXUS-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+      const { error } = await supabase.from("invite_codes").insert({
+        code,
+        is_active: true,
+        max_uses: 1,
+        use_count: 0,
+      });
+      if (!error) setInviteCode(code);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setGeneratingInvite(false);
+    }
+  };
+
+  const copyCode = () => {
+    navigator.clipboard.writeText(inviteCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const locale = pathname.split("/")[1] || "pt-BR";
   const summary = financeStore.getSummary();
@@ -147,7 +175,46 @@ export default function MenuPage() {
             <span className="ml-auto text-muted">→</span>
           </Link>
 
-      {/* Logout */}
+      {/* Invite Code Generator */}
+      <GlassCard padding="md" className="mb-4">
+        <div className="flex items-center gap-2 mb-3">
+          <UserPlus size={14} className="text-habit" />
+          <h2 className="text-secondary text-xs uppercase tracking-wider">Convidar usuário</h2>
+        </div>
+        {inviteCode ? (
+          <div className="flex flex-col gap-2">
+            <div
+              className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+              style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.3)" }}
+            >
+              <span className="text-habit font-mono font-semibold text-sm">{inviteCode}</span>
+              <button onClick={copyCode} className="flex items-center gap-1 text-xs text-muted hover:text-habit transition-colors">
+                {copied ? <Check size={14} className="text-finance" /> : <Copy size={14} />}
+                {copied ? "Copiado!" : "Copiar"}
+              </button>
+            </div>
+            <p className="text-muted text-xs">Use de 1 vez. Compartilhe com quem quiser convidar.</p>
+            <button onClick={() => setInviteCode("")} className="text-atlas text-xs underline underline-offset-2 text-left">
+              Gerar outro código
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={generateInviteCode}
+            disabled={generatingInvite}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all"
+            style={{
+              background: "rgba(139,92,246,0.12)",
+              border: "1px solid rgba(139,92,246,0.25)",
+              color: "#8b5cf6",
+              opacity: generatingInvite ? 0.6 : 1,
+            }}
+          >
+            <UserPlus size={14} />
+            {generatingInvite ? "Gerando..." : "Gerar código de convite"}
+          </button>
+        )}
+      </GlassCard>
       <NexusButton
         variant="danger"
         className="w-full"
