@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 type Mode = "login" | "register";
-type Status = "idle" | "loading" | "confirm" | "error";
+type Status = "idle" | "loading" | "confirm" | "reset_sent" | "error";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -43,7 +43,7 @@ export default function LoginPage() {
       if (error) {
         setErrorMsg(
           error.message.includes("Invalid login credentials")
-            ? "E-mail ou senha incorretos."
+            ? "E-mail ou senha incorretos. Use 'Esqueci a senha' para definir uma."
             : error.message
         );
         setStatus("error");
@@ -51,6 +51,26 @@ export default function LoginPage() {
       // AuthGuard handles redirect after SIGNED_IN event
     } catch {
       setErrorMsg("Erro inesperado. Tente novamente.");
+      setStatus("error");
+    }
+  };
+
+  // ── Forgot Password ────────────────────────────────────────────────────────
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setErrorMsg("Digite seu e-mail acima para receber o link.");
+      setStatus("error");
+      return;
+    }
+    setStatus("loading");
+    try {
+      const supabase = createClient();
+      await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/api/auth/callback?next=/pt-BR`,
+      });
+      setStatus("reset_sent");
+    } catch {
+      setErrorMsg("Erro ao enviar e-mail. Tente novamente.");
       setStatus("error");
     }
   };
@@ -207,6 +227,28 @@ export default function LoginPage() {
               Usar outro e-mail
             </button>
           </div>
+        ) : status === "reset_sent" ? (
+          <div className="flex flex-col items-center gap-4 text-center">
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center"
+              style={{ background: "rgba(59,130,246,0.15)" }}
+            >
+              <CheckCircle className="text-atlas" size={28} />
+            </div>
+            <div>
+              <h2 className="text-primary font-semibold text-lg">Link enviado!</h2>
+              <p className="text-secondary text-sm mt-1">
+                Enviamos um link para <strong>{email}</strong>.
+                Clique no link para definir sua nova senha.
+              </p>
+            </div>
+            <button
+              onClick={() => { setStatus("idle"); }}
+              className="text-atlas text-sm underline underline-offset-2 mt-2"
+            >
+              Voltar ao login
+            </button>
+          </div>
         ) : (
           <>
             {/* Tabs */}
@@ -259,6 +301,13 @@ export default function LoginPage() {
                 />
                 {status === "error" && <ErrorMsg msg={errorMsg} />}
                 <SubmitBtn loading={status === "loading"} label="Entrar" />
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-muted text-xs text-center hover:text-atlas transition-colors mt-1"
+                >
+                  Esqueci minha senha / Primeiro acesso
+                </button>
               </form>
             )}
 
