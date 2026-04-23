@@ -44,6 +44,9 @@ alter table transactions
   add column if not exists recurring_day int; -- dia do mês (1-28)
 
 alter table transactions
+  add column if not exists recurring_source_id uuid references transactions(id) on delete set null;
+
+alter table transactions
   add column if not exists last_generated date; -- data da última geração
 
 -- ──────────────────────────────────────────────────
@@ -66,17 +69,41 @@ create table if not exists invite_codes (
 
 alter table invite_codes enable row level security;
 
--- Qualquer um pode ler (para validar código no cadastro)
-create policy if not exists "public can validate invite codes"
-  on invite_codes for select using (true);
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = current_schema()
+      and tablename = 'invite_codes'
+      and policyname = 'public can validate invite codes'
+  ) then
+    execute 'create policy "public can validate invite codes"
+      on invite_codes for select using (true)';
+  end if;
 
--- Usuários autenticados podem criar novos códigos
-create policy if not exists "auth users can create invite codes"
-  on invite_codes for insert with check (auth.role() = 'authenticated');
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = current_schema()
+      and tablename = 'invite_codes'
+      and policyname = 'auth users can create invite codes'
+  ) then
+    execute 'create policy "auth users can create invite codes"
+      on invite_codes for insert with check (auth.role() = ''authenticated'')';
+  end if;
 
--- Usuários autenticados podem marcar código como usado
-create policy if not exists "auth users can use invite codes"
-  on invite_codes for update using (auth.role() = 'authenticated');
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = current_schema()
+      and tablename = 'invite_codes'
+      and policyname = 'auth users can use invite codes'
+  ) then
+    execute 'create policy "auth users can use invite codes"
+      on invite_codes for update using (auth.role() = ''authenticated'')';
+  end if;
+end $$;
 
 -- ──────────────────────────────────────────────────
 -- 5. Enable RLS
@@ -87,11 +114,30 @@ alter table fixed_expenses   enable row level security;
 -- ──────────────────────────────────────────────────
 -- 6. RLS Policies
 -- ──────────────────────────────────────────────────
-create policy if not exists "users own financial_config" on financial_config
-  for all using (auth.uid() = uid);
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = current_schema()
+      and tablename = 'financial_config'
+      and policyname = 'users own financial_config'
+  ) then
+    execute 'create policy "users own financial_config" on financial_config
+      for all using (auth.uid() = uid)';
+  end if;
 
-create policy if not exists "users own fixed_expenses" on fixed_expenses
-  for all using (auth.uid() = uid);
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = current_schema()
+      and tablename = 'fixed_expenses'
+      and policyname = 'users own fixed_expenses'
+  ) then
+    execute 'create policy "users own fixed_expenses" on fixed_expenses
+      for all using (auth.uid() = uid)';
+  end if;
+end $$;
 
 -- ──────────────────────────────────────────────────
 -- 7. Indexes for performance
@@ -101,3 +147,4 @@ create index if not exists idx_fixed_expenses_active on fixed_expenses(uid, is_a
 create index if not exists idx_transactions_layer    on transactions(uid, transaction_layer);
 create index if not exists idx_transactions_recurring on transactions(uid, is_recurring)
   where is_recurring = true;
+create index if not exists idx_transactions_recurring_source on transactions(uid, recurring_source_id);

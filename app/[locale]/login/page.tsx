@@ -16,6 +16,9 @@ export default function LoginPage() {
   const pathname = usePathname();
   const locale = pathname.split("/")[1] || "pt-BR";
 
+  const getAuthCallbackUrl = () =>
+    `${window.location.origin}/api/auth/callback?next=/${locale}`;
+
   const [mode, setMode] = useState<Mode>("login");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
@@ -62,16 +65,14 @@ export default function LoginPage() {
       setStatus("error");
       return;
     }
-    setStatus("loading");
-    try {
-      const supabase = createClient();
-      await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/api/auth/callback?next=/pt-BR`,
-      });
-      setStatus("reset_sent");
-    } catch {
-      setErrorMsg("Erro ao enviar e-mail. Tente novamente.");
-      setStatus("error");
+      setStatus("loading");
+      try {
+        const supabase = createClient();
+        await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: getAuthCallbackUrl() });
+        setStatus("reset_sent");
+      } catch {
+        setErrorMsg("Erro ao enviar e-mail. Tente novamente.");
+        setStatus("error");
     }
   };
 
@@ -118,6 +119,7 @@ export default function LoginPage() {
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: regEmail.trim().toLowerCase(),
         password: regPassword,
+        options: { emailRedirectTo: getAuthCallbackUrl() },
       });
 
       if (signUpError) {

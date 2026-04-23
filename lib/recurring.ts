@@ -24,23 +24,31 @@ export async function generateRecurringTransactions(uid: string): Promise<void> 
     // Only generate on or after the configured recurring day
     if (txn.recurring_day && today < txn.recurring_day) continue;
 
-    // Check if already generated this month
+    if (txn.last_generated?.startsWith(currentMonth)) continue;
+
+    // Check if already generated this month for this template
     const alreadyExists = await supabase
       .from("transactions")
-      .select("id")
+      .select("id, date")
       .eq("uid", uid)
-      .eq("description", txn.description)
-      .eq("is_recurring", false)
+      .eq("recurring_source_id", txn.id)
       .like("date", `${currentMonth}%`)
       .maybeSingle();
 
-    if (alreadyExists.data) continue; // already generated
+    if (alreadyExists.data) {
+      await supabase
+        .from("transactions")
+        .update({ last_generated: alreadyExists.data.date })
+        .eq("id", txn.id);
+      continue;
+    }
 
     // Generate the transaction for this month on the configured day
     const generationDate = `${currentMonth}-${String(txn.recurring_day ?? 1).padStart(2, "0")}`;
 
     await supabase.from("transactions").insert({
       uid,
+      recurring_source_id: txn.id,
       description: txn.description,
       amount: txn.amount,
       category: txn.category,

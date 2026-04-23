@@ -53,6 +53,7 @@ export const TransactionSchema = z.object({
   transaction_layer: TransactionLayerSchema.default("variable"),
   is_recurring: z.boolean().default(false),
   recurring_day: z.number().nullable().optional(),
+  recurring_source_id: z.string().uuid().nullable().optional(),
   last_generated: z.string().nullable().optional(),
   created_at: z.string(),
 });
