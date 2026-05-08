@@ -8,15 +8,22 @@ import { generateRecurringTransactions } from "@/lib/recurring";
 import Sidebar from "./Sidebar";
 import BottomNav from "./BottomNav";
 
-const PUBLIC_PATHS = ["/login", "/onboarding"];
+// Paths that bypass auth check entirely (no session required)
+const PUBLIC_PATHS = ["/login", "/reset-password"];
+// Paths that require auth but don't redirect logged-in users away
+const PROTECTED_PASS_PATHS = ["/admin", "/onboarding"];
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { setProfile, setLoading } = useAuthStore();
   const [ready, setReady] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const isPublicPath = PUBLIC_PATHS.some((p) => pathname.includes(p));
+  const isPassPath = PROTECTED_PASS_PATHS.some((p) => pathname.includes(p));
+
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -51,7 +58,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
               .insert({
                 id: uid,
                 email: session.user.email ?? "",
-                full_name: null,
                 total_xp: 0,
                 onboarding_complete: false,
                 created_at: new Date().toISOString(),
@@ -65,17 +71,18 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
           setLoading(false);
 
           if (isPublicPath) {
-            // If logged in but on onboarding path, let them stay
-            if (pathname.includes("/onboarding")) {
-              setReady(true);
-              return;
-            }
-            // If logged in on login page, redirect to dashboard or onboarding
+            // Logged in on login page → redirect to dashboard or onboarding
             if (profile?.onboarding_complete === false || profile?.onboarding_complete === null) {
               router.replace(`/${localePart}/onboarding`);
               return;
             }
             router.replace(`/${localePart}`);
+            return;
+          }
+
+          // Admin / onboarding: let them stay, they handle their own auth
+          if (isPassPath) {
+            setReady(true);
             return;
           }
 
@@ -98,7 +105,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // PASSWORD_RECOVERY: user clicked reset link — stay on reset-password page
+        if (event === "PASSWORD_RECOVERY") return;
+
         if (event === "SIGNED_IN" && session) {
+          // If already on reset-password, don't redirect away
+          if (pathname.includes("/reset-password")) return;
+
           const uid = session.user.id;
           const localePart = pathname.split("/")[1] || "pt-BR";
 
@@ -127,13 +140,20 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // On onboarding page, render without sidebar/nav
-  if (pathname.includes("/onboarding")) {
+  // SSR skeleton — prevents hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="min-h-dvh bg-nexus" aria-hidden />
+    );
+  }
+
+  // Public paths (login, reset-password) — no auth needed
+  if (isPublicPath) {
     return <>{children}</>;
   }
 
-  // Always render on public paths
-  if (isPublicPath) {
+  // Pass-through paths (admin, onboarding) — render without sidebar
+  if (isPassPath) {
     return <>{children}</>;
   }
 

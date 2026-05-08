@@ -1,57 +1,184 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import {
-  Mail, Lock, Key, Sparkles, CheckCircle, AlertCircle,
-  Loader, Eye, EyeOff, UserPlus, LogIn,
-} from "lucide-react";
+import { Mail, Lock, Sparkles, AlertCircle, Loader, Eye, EyeOff, UserPlus, ArrowLeft, CheckCircle2 } from "lucide-react";
 
-type Mode = "login" | "register";
-type Status = "idle" | "loading" | "confirm" | "reset_sent" | "error";
+// ── Google Icon ───────────────────────────────────────────────────────────────
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4"/>
+      <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+      <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+    </svg>
+  );
+}
+
+type Status = "idle" | "loading" | "reset_sent" | "error" | "success";
 
 export default function LoginPage() {
-  const router = useRouter();
   const pathname = usePathname();
+  const router = useRouter();
   const locale = pathname.split("/")[1] || "pt-BR";
+
+  const [mounted, setMounted] = useState(false);
+  const [status, setStatus] = useState<Status>("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [needsPassword, setNeedsPassword] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "access_denied") {
+      setErrorMsg("Seu e-mail não tem acesso ao Nexus. Entre em contato para solicitar acesso.");
+      setStatus("error");
+    } else if (params.get("error") === "auth") {
+      setErrorMsg("Erro na autenticação. Tente novamente.");
+      setStatus("error");
+    }
+  }, []);
 
   const getAuthCallbackUrl = () =>
     `${window.location.origin}/api/auth/callback?next=/${locale}`;
 
-  const [mode, setMode] = useState<Mode>("login");
-  const [status, setStatus] = useState<Status>("idle");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [showPass, setShowPass] = useState(false);
+  // ── Google OAuth ────────────────────────────────────────────────────────────
+  const handleGoogleLogin = async () => {
+    setStatus("loading");
+    setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: getAuthCallbackUrl(),
+          queryParams: { access_type: "offline", prompt: "consent" },
+        },
+      });
+      if (error) {
+        setErrorMsg("Erro ao conectar com Google. Tente novamente.");
+        setStatus("error");
+      }
+    } catch {
+      setErrorMsg("Erro inesperado. Tente novamente.");
+      setStatus("error");
+    }
+  };
 
-  // Login fields
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  // Register fields
-  const [regEmail, setRegEmail] = useState("");
-  const [regPassword, setRegPassword] = useState("");
-  const [regConfirm, setRegConfirm] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
-
-  const resetError = () => { setStatus("idle"); setErrorMsg(""); };
-
-  // ── Login ──────────────────────────────────────────────────────────────────
+  // ── Email + Password login ──────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("loading");
+    setErrorMsg("");
+    setSuccessMsg("");
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+      // Check allowlist first
+      const { data: allowed } = await supabase
+        .from("allowed_emails")
+        .select("email")
+        .eq("email", email.trim().toLowerCase())
+        .single();
+
+      if (!allowed) {
+        setErrorMsg("Seu e-mail não tem acesso ao Nexus. Entre em contato para solicitar acesso.");
+        setStatus("error");
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
       if (error) {
         setErrorMsg(
           error.message.includes("Invalid login credentials")
-            ? "E-mail ou senha incorretos. Use 'Esqueci a senha' para definir uma."
+            ? "E-mail ou senha incorretos."
             : error.message
         );
         setStatus("error");
       }
-      // AuthGuard handles redirect after SIGNED_IN event
+    } catch {
+      setErrorMsg("Erro inesperado. Tente novamente.");
+      setStatus("error");
+    }
+  };
+
+  // ── Invite Validation ──────────────────────────────────────────────────────
+  const handleValidateInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteCode.trim() || !email.trim()) {
+      setErrorMsg("Preencha o e-mail e o código.");
+      setStatus("error");
+      return;
+    }
+    setStatus("loading");
+    setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("validate_and_register_invite", {
+        p_code: inviteCode.trim().toUpperCase(),
+        p_email: email.trim().toLowerCase(),
+      });
+
+      if (error) {
+        setErrorMsg(error.message);
+        setStatus("error");
+        return;
+      }
+
+      if (data.success) {
+        setSuccessMsg(data.message);
+        setNeedsPassword(true);
+        setStatus("idle");
+      } else {
+        setErrorMsg(data.message);
+        setStatus("error");
+      }
+    } catch {
+      setErrorMsg("Erro inesperado. Tente novamente.");
+      setStatus("error");
+    }
+  };
+
+  // ── Finalize Sign Up ────────────────────────────────────────────────────────
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password || password.length < 6) {
+      setErrorMsg("A senha deve ter pelo menos 6 caracteres.");
+      setStatus("error");
+      return;
+    }
+    setStatus("loading");
+    setErrorMsg("");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          emailRedirectTo: getAuthCallbackUrl(),
+        }
+      });
+      if (error) {
+        setErrorMsg(error.message);
+        setStatus("error");
+      } else {
+        setSuccessMsg("Cadastro concluído! Redirecionando...");
+        // Auto sign in after signup if possible, or wait for redirect
+        router.push(`/${locale}/onboarding`);
+      }
     } catch {
       setErrorMsg("Erro inesperado. Tente novamente.");
       setStatus("error");
@@ -65,394 +192,303 @@ export default function LoginPage() {
       setStatus("error");
       return;
     }
-      setStatus("loading");
-      try {
-        const supabase = createClient();
-        await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: getAuthCallbackUrl() });
-        setStatus("reset_sent");
-      } catch {
-        setErrorMsg("Erro ao enviar e-mail. Tente novamente.");
-        setStatus("error");
-    }
-  };
-
-  // ── Register ───────────────────────────────────────────────────────────────
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (regPassword.length < 6) {
-      setErrorMsg("A senha deve ter pelo menos 6 caracteres.");
-      setStatus("error");
-      return;
-    }
-    if (regPassword !== regConfirm) {
-      setErrorMsg("As senhas não coincidem.");
-      setStatus("error");
-      return;
-    }
-    if (!inviteCode.trim()) {
-      setErrorMsg("Código de convite obrigatório.");
-      setStatus("error");
-      return;
-    }
-
     setStatus("loading");
-
+    setErrorMsg("");
     try {
       const supabase = createClient();
-
-      // 1. Validate invite code
-      const { data: code, error: codeError } = await supabase
-        .from("invite_codes")
-        .select("*")
-        .eq("code", inviteCode.trim().toUpperCase())
-        .eq("is_active", true)
-        .single();
-
-      if (codeError || !code || code.use_count >= code.max_uses) {
-        setErrorMsg("Código de convite inválido ou já utilizado.");
-        setStatus("error");
-        return;
-      }
-
-      // 2. Create account
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: regEmail.trim().toLowerCase(),
-        password: regPassword,
-        options: { emailRedirectTo: getAuthCallbackUrl() },
+      await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/api/auth/callback?type=recovery`,
       });
-
-      if (signUpError) {
-        setErrorMsg(
-          signUpError.message.includes("already registered")
-            ? "Este e-mail já está cadastrado. Faça login."
-            : signUpError.message
-        );
-        setStatus("error");
-        return;
-      }
-
-      const user = signUpData.user;
-
-      if (!user) {
-        // Email confirmation required — show "check email" screen
-        setStatus("confirm");
-        return;
-      }
-
-      // 3. Create profile immediately
-      await supabase.from("profiles").upsert({
-        id: user.id,
-        email: regEmail.trim().toLowerCase(),
-        full_name: null,
-        total_xp: 0,
-        onboarding_complete: false,
-        created_at: new Date().toISOString(),
-      }, { onConflict: "id" });
-
-      // 4. Mark invite code as used
-      const newCount = code.use_count + 1;
-      await supabase
-        .from("invite_codes")
-        .update({ use_count: newCount, is_active: newCount < code.max_uses })
-        .eq("id", code.id);
-
-      // 5. Sign in (if email confirmation is disabled in Supabase)
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: regEmail.trim().toLowerCase(),
-        password: regPassword,
-      });
-
-      if (signInError) {
-        // Email confirmation is enabled — show confirmation screen
-        setStatus("confirm");
-        return;
-      }
-
-      // 6. Go to onboarding
-      router.replace(`/${locale}/onboarding`);
-
+      setStatus("reset_sent");
     } catch {
-      setErrorMsg("Erro inesperado. Tente novamente.");
+      setErrorMsg("Erro ao enviar e-mail. Tente novamente.");
       setStatus("error");
     }
   };
 
-  // ── UI ─────────────────────────────────────────────────────────────────────
+  if (!mounted) {
+    return (
+      <div
+        className="min-h-dvh flex flex-col items-center justify-center p-6"
+        style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.12) 0%, #000 60%)" }}
+      >
+        <Logo />
+        <div className="w-full max-w-sm glass" style={{ padding: "32px", minHeight: "260px" }} />
+      </div>
+    );
+  }
+
+  if (status === "reset_sent") {
+    return (
+      <div
+        className="min-h-dvh flex flex-col items-center justify-center p-6"
+        style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.12) 0%, #000 60%)" }}
+      >
+        <Logo />
+        <div className="w-full max-w-sm glass animate-slide-up flex flex-col items-center gap-4 text-center" style={{ padding: "32px" }}>
+          <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: "rgba(59,130,246,0.15)" }}>
+            <Mail size={28} className="text-atlas" />
+          </div>
+          <div>
+            <h2 className="text-primary font-semibold text-lg">Link enviado!</h2>
+            <p className="text-secondary text-sm mt-1">
+              Enviamos um link para <strong>{email}</strong>. Clique para definir sua nova senha.
+            </p>
+          </div>
+          <button onClick={() => setStatus("idle")} className="text-atlas text-sm underline underline-offset-2 mt-2">
+            Voltar ao login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className="min-h-dvh flex flex-col items-center justify-center p-6"
-      style={{
-        background: "radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.12) 0%, #000 60%)",
-      }}
+      style={{ background: "radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.12) 0%, #000 60%)" }}
     >
-      {/* Logo */}
-      <div className="flex flex-col items-center gap-3 mb-8 animate-fade-in">
-        <div
-          className="w-16 h-16 rounded-2xl flex items-center justify-center"
-          style={{
-            background: "linear-gradient(135deg, #3b82f6, #8b5cf6)",
-            boxShadow: "0 0 40px rgba(59,130,246,0.4)",
-          }}
-        >
-          <span className="text-2xl text-white">✦</span>
-        </div>
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-primary tracking-widest">NEXUS</h1>
-          <p className="text-secondary text-sm tracking-widest">LIFE OS</p>
-        </div>
-      </div>
+      <Logo />
 
-      {/* Card */}
       <div className="w-full max-w-sm glass animate-slide-up" style={{ padding: "32px" }}>
-
-        {/* Email confirmation screen */}
-        {status === "confirm" ? (
-          <div className="flex flex-col items-center gap-4 text-center">
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center"
-              style={{ background: "rgba(16,185,129,0.15)" }}
-            >
-              <CheckCircle className="text-finance" size={28} />
-            </div>
-            <div>
-              <h2 className="text-primary font-semibold text-lg">Verifique seu e-mail!</h2>
-              <p className="text-secondary text-sm mt-1">
-                Enviamos um link de confirmação para <strong>{regEmail}</strong>.
-                Clique no link para ativar sua conta.
-              </p>
-            </div>
-            <button
-              onClick={() => { setStatus("idle"); setMode("register"); }}
-              className="text-atlas text-sm underline underline-offset-2 mt-2"
-            >
-              Usar outro e-mail
-            </button>
+        
+        {successMsg && !showInvite && !needsPassword && (
+          <div className="flex items-start gap-2 px-3 py-3 rounded-lg mb-4 animate-fade-in" style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)" }}>
+            <CheckCircle2 size={16} className="text-finance shrink-0 mt-0.5" />
+            <p className="text-finance text-xs">{successMsg}</p>
           </div>
-        ) : status === "reset_sent" ? (
-          <div className="flex flex-col items-center gap-4 text-center">
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center"
-              style={{ background: "rgba(59,130,246,0.15)" }}
+        )}
+
+        {showInvite ? (
+          <div className="animate-fade-in">
+            <button 
+              onClick={() => { setShowInvite(false); setNeedsPassword(false); setErrorMsg(""); setSuccessMsg(""); }}
+              className="flex items-center gap-2 text-muted text-xs mb-6 hover:text-primary transition-colors"
             >
-              <CheckCircle className="text-atlas" size={28} />
-            </div>
-            <div>
-              <h2 className="text-primary font-semibold text-lg">Link enviado!</h2>
-              <p className="text-secondary text-sm mt-1">
-                Enviamos um link para <strong>{email}</strong>.
-                Clique no link para definir sua nova senha.
-              </p>
-            </div>
-            <button
-              onClick={() => { setStatus("idle"); }}
-              className="text-atlas text-sm underline underline-offset-2 mt-2"
-            >
-              Voltar ao login
+              <ArrowLeft size={14} /> Voltar ao login
             </button>
+            
+            <h2 className="text-primary font-bold text-xl mb-2">
+              {needsPassword ? "Definir Senha" : "Usar Convite"}
+            </h2>
+            <p className="text-secondary text-xs mb-6">
+              {needsPassword 
+                ? "Quase lá! Escolha uma senha segura para sua conta." 
+                : "Registre seu e-mail usando um código de convite válido."}
+            </p>
+
+            <form onSubmit={needsPassword ? handleSignUp : handleValidateInvite} className="flex flex-col gap-4">
+              {!needsPassword ? (
+                <>
+                  <InputField
+                    icon={<Mail size={15} className="text-muted" />}
+                    type="email"
+                    id="invite-email"
+                    placeholder="Seu melhor e-mail"
+                    value={email}
+                    onChange={setEmail}
+                  />
+                  <InputField
+                    icon={<UserPlus size={15} className="text-muted" />}
+                    type="text"
+                    id="invite-code"
+                    placeholder="Código (Ex: NEXUS-XXXX)"
+                    value={inviteCode}
+                    onChange={(v) => setInviteCode(v.toUpperCase())}
+                  />
+                </>
+              ) : (
+                <InputField
+                  icon={<Lock size={15} className="text-muted" />}
+                  type={showPass ? "text" : "password"}
+                  id="signup-password"
+                  placeholder="Crie sua senha"
+                  value={password}
+                  onChange={setPassword}
+                  rightEl={
+                    <button type="button" onClick={() => setShowPass(s => !s)} className="text-muted hover:text-secondary">
+                      {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  }
+                />
+              )}
+
+              {errorMsg && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.25)" }}>
+                  <AlertCircle size={14} className="text-expense shrink-0 mt-0.5" />
+                  <p className="text-expense text-xs">{errorMsg}</p>
+                </div>
+              )}
+
+              {successMsg && needsPassword && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.25)" }}>
+                  <CheckCircle2 size={14} className="text-finance shrink-0 mt-0.5" />
+                  <p className="text-finance text-xs">{successMsg}</p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={status === "loading"}
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold text-sm text-white transition-all mt-2"
+                style={{
+                  background: needsPassword 
+                    ? "linear-gradient(135deg, #10b981, #3b82f6)" 
+                    : "linear-gradient(135deg, #8b5cf6, #d946ef)",
+                  boxShadow: needsPassword 
+                    ? "0 4px 20px rgba(16,185,129,0.3)" 
+                    : "0 4px 20px rgba(139,92,246,0.3)",
+                  opacity: status === "loading" ? 0.6 : 1,
+                }}
+              >
+                {status === "loading" ? <Loader size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                {status === "loading" ? "Processando..." : (needsPassword ? "Finalizar Cadastro" : "Validar Convite")}
+              </button>
+            </form>
           </div>
         ) : (
           <>
-            {/* Tabs */}
-            <div
-              className="flex rounded-xl mb-6 p-1"
-              style={{ background: "rgba(255,255,255,0.06)" }}
+            <button
+              onClick={handleGoogleLogin}
+              disabled={status === "loading"}
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl font-semibold text-sm transition-all mb-5"
+              style={{
+                background: "rgba(255,255,255,0.07)",
+                border: "1px solid rgba(255,255,255,0.18)",
+                color: "#f1f5f9",
+                opacity: status === "loading" ? 0.6 : 1,
+              }}
             >
-              {(["login", "register"] as Mode[]).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => { setMode(m); resetError(); }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-all"
-                  style={{
-                    background: mode === m ? "rgba(59,130,246,0.2)" : "transparent",
-                    color: mode === m ? "#3b82f6" : "#64748b",
-                    border: mode === m ? "1px solid rgba(59,130,246,0.35)" : "1px solid transparent",
-                  }}
-                >
-                  {m === "login" ? <LogIn size={14} /> : <UserPlus size={14} />}
-                  {m === "login" ? "Entrar" : "Criar conta"}
-                </button>
-              ))}
+              {status === "loading" ? <Loader size={18} className="animate-spin" /> : <GoogleIcon />}
+              Continuar com Google
+            </button>
+
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
+              <span className="text-muted text-xs">ou entre com e-mail</span>
+              <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
             </div>
 
-            {/* Login form */}
-            {mode === "login" && (
-              <form onSubmit={handleLogin} className="flex flex-col gap-4">
-                <Field
-                  icon={<Mail size={15} className="text-muted" />}
-                  label="E-mail"
-                  type="email"
-                  id="login-email"
-                  placeholder="seu@email.com"
-                  value={email}
-                  onChange={setEmail}
-                />
-                <Field
-                  icon={<Lock size={15} className="text-muted" />}
-                  label="Senha"
-                  type={showPass ? "text" : "password"}
-                  id="login-password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={setPassword}
-                  rightElement={
-                    <button type="button" onClick={() => setShowPass(s => !s)} className="text-muted hover:text-secondary">
-                      {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  }
-                />
-                {status === "error" && <ErrorMsg msg={errorMsg} />}
-                <SubmitBtn loading={status === "loading"} label="Entrar" />
-                <button
-                  type="button"
-                  onClick={handleForgotPassword}
-                  className="text-muted text-xs text-center hover:text-atlas transition-colors mt-1"
-                >
-                  Esqueci minha senha / Primeiro acesso
-                </button>
-              </form>
-            )}
+            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+              <InputField
+                icon={<Mail size={15} className="text-muted" />}
+                type="email"
+                id="login-email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={setEmail}
+              />
+              <InputField
+                icon={<Lock size={15} className="text-muted" />}
+                type={showPass ? "text" : "password"}
+                id="login-password"
+                placeholder="Senha"
+                value={password}
+                onChange={setPassword}
+                rightEl={
+                  <button type="button" onClick={() => setShowPass(s => !s)} className="text-muted hover:text-secondary">
+                    {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                }
+              />
 
-            {/* Register form */}
-            {mode === "register" && (
-              <form onSubmit={handleRegister} className="flex flex-col gap-4">
-                <Field
-                  icon={<Mail size={15} className="text-muted" />}
-                  label="E-mail"
-                  type="email"
-                  id="reg-email"
-                  placeholder="seu@email.com"
-                  value={regEmail}
-                  onChange={setRegEmail}
-                />
-                <Field
-                  icon={<Lock size={15} className="text-muted" />}
-                  label="Senha"
-                  type={showPass ? "text" : "password"}
-                  id="reg-password"
-                  placeholder="Mínimo de 6 caracteres"
-                  value={regPassword}
-                  onChange={setRegPassword}
-                  rightElement={
-                    <button type="button" onClick={() => setShowPass(s => !s)} className="text-muted hover:text-secondary">
-                      {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  }
-                />
-                <Field
-                  icon={<Lock size={15} className="text-muted" />}
-                  label="Confirmar senha"
-                  type={showPass ? "text" : "password"}
-                  id="reg-confirm"
-                  placeholder="Repita a senha"
-                  value={regConfirm}
-                  onChange={setRegConfirm}
-                />
-                <div className="h-px" style={{ background: "rgba(255,255,255,0.08)" }} />
-                <Field
-                  icon={<Key size={15} className="text-muted" />}
-                  label="Código de convite"
-                  type="text"
-                  id="invite-code"
-                  placeholder="Ex: NEXUS-AB12"
-                  value={inviteCode}
-                  onChange={(v) => setInviteCode(v.toUpperCase())}
-                  hint="Você precisa de um código para criar conta."
-                />
-                {status === "error" && <ErrorMsg msg={errorMsg} />}
-                <SubmitBtn loading={status === "loading"} label="Criar conta" />
-              </form>
-            )}
+              {errorMsg && (
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg" style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.25)" }}>
+                  <AlertCircle size={14} className="text-expense shrink-0 mt-0.5" />
+                  <p className="text-expense text-xs">{errorMsg}</p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={status === "loading"}
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold text-sm text-white transition-all"
+                style={{
+                  background: "linear-gradient(135deg, #3b82f6, #8b5cf6)",
+                  boxShadow: "0 4px 20px rgba(59,130,246,0.3)",
+                  opacity: status === "loading" ? 0.6 : 1,
+                }}
+              >
+                {status === "loading" ? <Loader size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                {status === "loading" ? "Aguarde..." : "Entrar"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-muted text-xs text-center hover:text-atlas transition-colors"
+              >
+                Esqueci minha senha
+              </button>
+            </form>
+            
+            <div className="mt-8 pt-6 border-t border-white/5">
+              <button 
+                onClick={() => { setShowInvite(true); setErrorMsg(""); setSuccessMsg(""); }}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-medium transition-all"
+                style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.15)", color: "#8b5cf6" }}
+              >
+                <UserPlus size={16} />
+                Tenho um código de convite
+              </button>
+            </div>
           </>
         )}
       </div>
 
-      <p className="text-muted text-xs mt-8 animate-fade-in opacity-50">
-        ✦ NEXUS LIFE OS — Acesso por convite
-      </p>
+      <p className="text-muted text-xs mt-8 opacity-40">✦ NEXUS LIFE OS — Acesso por convite</p>
     </div>
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+function Logo() {
+  return (
+    <div className="flex flex-col items-center gap-3 mb-8 animate-fade-in">
+      <div
+        className="w-16 h-16 rounded-2xl flex items-center justify-center"
+        style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", boxShadow: "0 0 40px rgba(59,130,246,0.4)" }}
+      >
+        <span className="text-2xl text-white">✦</span>
+      </div>
+      <div className="text-center">
+        <h1 className="text-2xl font-bold text-primary tracking-widest">NEXUS</h1>
+        <p className="text-secondary text-sm tracking-widest">LIFE OS</p>
+      </div>
+    </div>
+  );
+}
 
-function Field({
-  icon, label, type, id, placeholder, value, onChange, hint, rightElement,
+function InputField({
+  icon, type, id, placeholder, value, onChange, rightEl,
 }: {
   icon: React.ReactNode;
-  label: string;
   type: string;
   id: string;
   placeholder: string;
   value: string;
   onChange: (v: string) => void;
-  hint?: string;
-  rightElement?: React.ReactNode;
+  rightEl?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-secondary text-xs font-medium uppercase tracking-wider">
-        {label}
-      </label>
-      <div className="relative flex items-center">
-        <div className="absolute left-3 pointer-events-none">{icon}</div>
-        <input
-          id={id}
-          type={type}
-          required
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full pl-9 pr-10 py-3 rounded-xl text-primary text-sm outline-none transition-all"
-          style={{
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            caretColor: "#3b82f6",
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = "rgba(59,130,246,0.6)";
-            e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.08)";
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = "rgba(255,255,255,0.12)";
-            e.target.style.boxShadow = "none";
-          }}
-        />
-        {rightElement && (
-          <div className="absolute right-3">{rightElement}</div>
-        )}
-      </div>
-      {hint && <p className="text-muted text-xs">{hint}</p>}
+    <div className="relative flex items-center">
+      <div className="absolute left-3 pointer-events-none">{icon}</div>
+      <input
+        id={id}
+        type={type}
+        required
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full pl-9 pr-10 py-3 rounded-xl text-primary text-sm outline-none transition-all"
+        style={{
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          caretColor: "#3b82f6",
+        }}
+        onFocus={(e) => { e.target.style.borderColor = "rgba(59,130,246,0.6)"; e.target.style.boxShadow = "0 0 0 3px rgba(59,130,246,0.08)"; }}
+        onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.12)"; e.target.style.boxShadow = "none"; }}
+      />
+      {rightEl && <div className="absolute right-3">{rightEl}</div>}
     </div>
-  );
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return (
-    <div
-      className="flex items-center gap-2 px-3 py-2 rounded-lg"
-      style={{ background: "rgba(244,63,94,0.1)", border: "1px solid rgba(244,63,94,0.25)" }}
-    >
-      <AlertCircle size={14} className="text-expense shrink-0" />
-      <p className="text-expense text-xs">{msg}</p>
-    </div>
-  );
-}
-
-function SubmitBtn({ loading, label }: { loading: boolean; label: string }) {
-  return (
-    <button
-      type="submit"
-      disabled={loading}
-      className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-semibold text-sm text-white transition-all mt-1"
-      style={{
-        background: "linear-gradient(135deg, #3b82f6, #8b5cf6)",
-        boxShadow: "0 4px 20px rgba(59,130,246,0.35)",
-        opacity: loading ? 0.6 : 1,
-      }}
-    >
-      {loading ? <Loader size={16} className="animate-spin" /> : <Sparkles size={16} />}
-      {loading ? "Aguarde..." : label}
-    </button>
   );
 }
