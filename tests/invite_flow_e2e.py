@@ -36,7 +36,7 @@ def run_invite_e2e():
         # 3. Fill Form
         print("✍️ Filling invite details...")
         page.fill('input[id="invite-email"]', test_email)
-        page.fill('input[id="invite-code"]', "NEXUS-BETA-TEST") # Using the one I created
+        page.fill('input[id="invite-code"]', "NEXUS-NOVOTESTE") # Using the newly created code
         
         # Take screenshot of the form
         page.screenshot(path='tests/invite_form_filled.png')

@@ -173,7 +173,7 @@ export default function LoginPage() {
     setErrorMsg("");
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: {
@@ -183,10 +183,14 @@ export default function LoginPage() {
       if (error) {
         setErrorMsg(error.message);
         setStatus("error");
-      } else {
+      } else if (data.session) {
         setSuccessMsg("Cadastro concluído! Redirecionando...");
-        // Auto sign in after signup if possible, or wait for redirect
         router.push(`/${locale}/onboarding`);
+      } else {
+        setSuccessMsg("Cadastro concluído! Por favor, verifique a caixa de entrada do seu e-mail para confirmar a conta.");
+        setNeedsPassword(false);
+        setShowInvite(false);
+        setStatus("idle");
       }
     } catch {
       setErrorMsg("Erro inesperado. Tente novamente.");
