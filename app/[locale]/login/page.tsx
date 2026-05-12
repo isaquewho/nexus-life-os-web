@@ -116,6 +116,9 @@ export default function LoginPage() {
             : error.message
         );
         setStatus("error");
+      } else {
+        router.push(`/${locale}`);
+        router.refresh();
       }
     } catch {
       setErrorMsg("Erro inesperado. Tente novamente.");
