@@ -1,11 +1,13 @@
 "use client";
 
+// Admin email constant used for UI highlights
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || "admin@example.com";
+
+
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { UserPlus, Trash2, Mail, Users, Shield, Loader, AlertCircle, CheckCircle, LogOut } from "lucide-react";
-
-const ADMIN_EMAIL = "isaquediass33@gmail.com";
 
 type AllowedEmail = {
   id: string;
@@ -29,28 +31,39 @@ export default function AdminPage() {
   // ── Auth check ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const init = async () => {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session || session.user.email !== ADMIN_EMAIL) {
-        router.replace(`/${locale}`);
+      const ok = await loadEmails();
+      if (!ok) {
+        setChecking(false);
         return;
       }
-
       setIsAdmin(true);
-      await loadEmails(supabase);
       setChecking(false);
     };
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadEmails = async (supabase: ReturnType<typeof createClient>) => {
-    const { data } = await supabase
-      .from("allowed_emails")
-      .select("*")
-      .order("created_at", { ascending: false });
-    setEmails(data ?? []);
+  const loadEmails = async () => {
+    const response = await fetch("/api/admin/allowlist", {
+      credentials: "include",
+    });
+
+    if (response.status === 403) {
+      router.replace(`/${locale}`);
+      return false;
+    }
+
+    if (!response.ok) {
+      showFeedback("error", "Erro ao carregar acessos.");
+      setEmails([]);
+      return true;
+    }
+
+    const { emails: entries } = (await response.json()) as {
+      emails?: AllowedEmail[];
+    };
+    setEmails(entries ?? []);
+    return true;
   };
 
   const showFeedback = (type: "success" | "error", msg: string) => {
@@ -66,21 +79,29 @@ export default function AdminPage() {
 
     setAdding(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("allowed_emails")
-        .insert({ email: trimmed });
+      const response = await fetch("/api/admin/allowlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: trimmed }),
+      });
 
-      if (error) {
-        if (error.code === "23505") {
-          showFeedback("error", "Este e-mail já tem acesso.");
-        } else {
-          showFeedback("error", "Erro ao liberar acesso: " + error.message);
-        }
+      if (response.status === 403) {
+        router.replace(`/${locale}`);
+        return;
+      }
+
+      if (response.status === 409) {
+        showFeedback("error", "Este e-mail já tem acesso.");
+      } else if (!response.ok) {
+        const { error } = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        showFeedback("error", error ?? "Erro ao liberar acesso.");
       } else {
         showFeedback("success", `Acesso liberado para ${trimmed}`);
         setNewEmail("");
-        await loadEmails(supabase);
+        await loadEmails();
       }
     } catch {
       showFeedback("error", "Erro inesperado.");
@@ -91,20 +112,25 @@ export default function AdminPage() {
 
   // ── Remove email ────────────────────────────────────────────────────────────
   const handleRemove = async (id: string, email: string) => {
-    if (email === ADMIN_EMAIL) {
-      showFeedback("error", "Você não pode remover seu próprio acesso.");
-      return;
-    }
     setRemoving(id);
     try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("allowed_emails")
-        .delete()
-        .eq("id", id);
+      const response = await fetch("/api/admin/allowlist", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ id }),
+      });
 
-      if (error) {
-        showFeedback("error", "Erro ao revogar acesso.");
+      if (response.status === 403) {
+        router.replace(`/${locale}`);
+        return;
+      }
+
+      if (!response.ok) {
+        const { error } = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        showFeedback("error", error ?? "Erro ao revogar acesso.");
       } else {
         showFeedback("success", `Acesso revogado: ${email}`);
         setEmails((prev) => prev.filter((e) => e.id !== id));

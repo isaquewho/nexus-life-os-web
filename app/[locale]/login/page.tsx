@@ -81,20 +81,29 @@ export default function LoginPage() {
     setErrorMsg("");
     setSuccessMsg("");
     try {
-      const supabase = createClient();
+      const allowlistResponse = await fetch("/api/allowlist/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
 
-      // Check allowlist first
-      const { data: allowed } = await supabase
-        .from("allowed_emails")
-        .select("email")
-        .eq("email", email.trim().toLowerCase())
-        .single();
+      if (!allowlistResponse.ok) {
+        setErrorMsg("Erro ao validar acesso. Tente novamente.");
+        setStatus("error");
+        return;
+      }
+
+      const { allowed } = (await allowlistResponse.json()) as {
+        allowed?: boolean;
+      };
 
       if (!allowed) {
         setErrorMsg("Seu e-mail não tem acesso ao Nexus. Entre em contato para solicitar acesso.");
         setStatus("error");
         return;
       }
+
+      const supabase = createClient();
 
       const { error } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),

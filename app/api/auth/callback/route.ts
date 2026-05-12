@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { routing } from "@/i18n/routing";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -40,11 +41,17 @@ export async function GET(request: NextRequest) {
       const email = user.email ?? "";
 
       // ── Allowlist check (server-side with service role) ──────────────────
-      const { data: allowed } = await supabase
+      const service = createServiceClient();
+      const { data: allowed, error: allowlistError } = await service
         .from("allowed_emails")
         .select("email")
         .eq("email", email)
-        .single();
+        .maybeSingle();
+
+      if (allowlistError) {
+        await supabase.auth.signOut();
+        return NextResponse.redirect(`${origin}/pt-BR/login?error=auth`);
+      }
 
       if (!allowed) {
         // Not on the allowlist — sign out and redirect with denial message

@@ -126,7 +126,7 @@ export default function OnboardingPage() {
           category: goalCategory,
           target_amount: parseFloat(goalAmount),
           saved_amount: 0,
-          deadline: goalDeadline || null,
+          deadline: goalDeadline ? `${goalDeadline}-01` : null,
           monthly_planned: 0,
         });
       }
@@ -318,7 +318,7 @@ export default function OnboardingPage() {
               className="w-full px-4 py-3 rounded-xl text-primary text-sm outline-none"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)" }}
               value={goalDeadline}
-              onChange={(e) => setGoalDeadline(e.target.value ? e.target.value + "-01" : "")}
+              onChange={(e) => setGoalDeadline(e.target.value)}
             />
           </div>
         )}
