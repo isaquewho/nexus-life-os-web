@@ -63,6 +63,8 @@ self.addEventListener("fetch", (event) => {
         const fetchPromise = fetch(event.request).then((res) => {
           cache.put(event.request, res.clone());
           return res;
+        }).catch((error) => {
+          if (!cached) throw error;
         });
         return cached || fetchPromise;
       })
