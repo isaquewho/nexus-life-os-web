@@ -25,6 +25,7 @@ export default function OnboardingPage() {
 
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Step 1 — name
   const [name, setName] = useState(profile?.full_name ?? "");
@@ -82,30 +83,43 @@ export default function OnboardingPage() {
 
   const handleComplete = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
       const supabase = createClient();
-      const { data: session } = await supabase.auth.getSession();
-      const uid = session.session?.user.id;
-      if (!uid) return;
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) {
+        setSaveError("Sessão expirada. Faça login novamente.");
+        router.replace(`/${locale}/login`);
+        return;
+      }
+      const uid = userData.user.id;
 
       // 1. Update profile name + mark onboarding complete
-      const { data: updatedProfile } = await supabase
+      const { data: updatedProfile, error: profileError } = await supabase
         .from("profiles")
         .update({ full_name: name.trim(), onboarding_complete: true })
         .eq("id", uid)
         .select()
         .single();
+      if (profileError) {
+        setSaveError(profileError.message);
+        return;
+      }
       if (updatedProfile) setProfile(updatedProfile);
 
       // 2. Upsert financial config (salary)
-      await supabase.from("financial_config").upsert(
+      const { error: financeError } = await supabase.from("financial_config").upsert(
         { uid, salary: parseFloat(salary) },
         { onConflict: "uid" }
       );
+      if (financeError) {
+        setSaveError(financeError.message);
+        return;
+      }
 
       // 3. Insert first habit
       if (habitName.trim()) {
-        await supabase.from("habits").insert({
+        const { error: habitError } = await supabase.from("habits").insert({
           uid,
           name: habitName.trim(),
           emoji: habitEmoji,
@@ -115,11 +129,15 @@ export default function OnboardingPage() {
           is_active: true,
           streak: 0,
         });
+        if (habitError) {
+          setSaveError(habitError.message);
+          return;
+        }
       }
 
       // 4. Insert first goal
       if (goalName.trim() && parseFloat(goalAmount) > 0) {
-        await supabase.from("goals").insert({
+        const { error: goalError } = await supabase.from("goals").insert({
           uid,
           name: goalName.trim(),
           emoji: GOAL_EMOJIS[goalCategory] ?? "🎯",
@@ -129,12 +147,16 @@ export default function OnboardingPage() {
           deadline: goalDeadline ? `${goalDeadline}-01` : null,
           monthly_planned: 0,
         });
+        if (goalError) {
+          setSaveError(goalError.message);
+          return;
+        }
       }
 
       // Done — go to dashboard
       router.replace(`/${locale}`);
     } catch (err) {
-      console.error("Onboarding error:", err);
+      setSaveError(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
       setSaving(false);
     }
@@ -345,6 +367,9 @@ export default function OnboardingPage() {
             {step === 3 ? "🚀 Começar" : "Próximo"}
           </NexusButton>
         </div>
+        {saveError && (
+          <p className="text-expense text-xs mt-3 text-center">{saveError}</p>
+        )}
       </div>
 
       {/* Branding */}
