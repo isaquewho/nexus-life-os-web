@@ -28,7 +28,7 @@ export default function OnboardingPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Step 1 — name
-  const [name, setName] = useState(profile?.full_name ?? "");
+  const [name, setName] = useState(profile?.display_name ?? "");
 
   // Step 2 — finance
   const [salary, setSalary] = useState("");
@@ -97,7 +97,7 @@ export default function OnboardingPage() {
       // 1. Update profile name + mark onboarding complete
       const { data: updatedProfile, error: profileError } = await supabase
         .from("profiles")
-        .update({ full_name: name.trim(), onboarding_complete: true })
+        .update({ display_name: name.trim(), onboarding_complete: true })
         .eq("id", uid)
         .select()
         .single();
@@ -144,7 +144,7 @@ export default function OnboardingPage() {
           category: goalCategory,
           target_amount: parseFloat(goalAmount),
           saved_amount: 0,
-          deadline: goalDeadline ? `${goalDeadline}-01` : null,
+          deadline: goalDeadline ? (goalDeadline.length === 7 ? `${goalDeadline}-01` : goalDeadline) : null,
           monthly_planned: 0,
         });
         if (goalError) {
@@ -156,6 +156,7 @@ export default function OnboardingPage() {
       // Done — go to dashboard
       router.replace(`/${locale}`);
     } catch (err) {
+      console.error("Onboarding error:", err);
       setSaveError(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
       setSaving(false);

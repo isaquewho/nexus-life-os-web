@@ -5,7 +5,7 @@ import { z } from "zod";
 export const ProfileSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
-  full_name: z.string().nullable(),
+  display_name: z.string().nullable(),
   avatar_url: z.string().nullable(),
   total_xp: z.number().default(0),
   onboarding_complete: z.boolean().default(false),

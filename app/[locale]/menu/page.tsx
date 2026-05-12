@@ -97,11 +97,11 @@ export default function MenuPage() {
             className="w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold shrink-0"
             style={{ background: "linear-gradient(135deg, #3b82f6, #8b5cf6)" }}
           >
-            {profile?.full_name?.[0]?.toUpperCase() ?? "✦"}
+            {profile?.display_name?.[0]?.toUpperCase() ?? "✦"}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-primary font-semibold text-lg truncate">
-              {profile?.full_name ?? "Usuário Nexus"}
+              {profile?.display_name ?? "Usuário Nexus"}
             </p>
             <p className="text-secondary text-sm truncate">{profile?.email ?? ""}</p>
             <div className="flex items-center gap-1 mt-1">

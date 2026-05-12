@@ -87,7 +87,7 @@ export default function DashboardPage() {
         <h1 className="text-primary text-2xl font-bold mt-1">
           {greeting},{" "}
           <span className="gradient-atlas">
-            {profile?.full_name?.split(" ")[0] ?? "você"} ✦
+            {profile?.display_name?.split(" ")[0] ?? "você"} ✦
           </span>
         </h1>
       </div>
