@@ -76,16 +76,20 @@ export default function FinancePage() {
     setSaving(true);
     try {
       const supabase = createClient();
-      const { data: session } = await supabase.auth.getSession();
-      const uid = session.session?.user.id;
-      if (!uid) return;
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) {
+        alert("Erro de autenticação: Usuário não encontrado.");
+        console.error("Auth error:", userError);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("transactions")
         .insert({
           uid,
           description: newTxn.description,
-          amount: parseFloat(newTxn.amount),
+          amount: parseFloat(newTxn.amount.replace(',', '.')),
           category: newTxn.category,
           type: newTxn.type,
           date: newTxn.date,
@@ -97,7 +101,13 @@ export default function FinancePage() {
         .select()
         .single();
 
-      if (!error && data) {
+      if (error) {
+        alert("Erro ao adicionar transação: " + error.message);
+        console.error("Insert error:", error);
+        return;
+      }
+
+      if (data) {
         setTransactions([data, ...transactions]);
         setShowAddTxn(false);
         setNewTxn({

@@ -44,16 +44,26 @@ export default function FinanceConfigPage() {
     setSavingSalary(true);
     try {
       const supabase = createClient();
-      const { data: session } = await supabase.auth.getSession();
-      const uid = session.session?.user.id;
-      if (!uid) return;
+      const { data: { user }, error: userErr } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) {
+        alert("Erro de autenticação");
+        console.error(userErr);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("financial_config")
-        .upsert({ uid, salary: parseFloat(salary), updated_at: new Date().toISOString() }, { onConflict: "uid" })
+        .upsert({ uid, salary: parseFloat(salary.replace(',', '.')), updated_at: new Date().toISOString() }, { onConflict: "uid" })
         .select()
         .single();
-      if (!error && data) setConfig(data);
+        
+      if (error) {
+        alert("Erro ao salvar: " + error.message);
+        console.error("Upsert error:", error);
+        return;
+      }
+      if (data) setConfig(data);
     } finally {
       setSavingSalary(false);
     }
@@ -64,16 +74,27 @@ export default function FinanceConfigPage() {
     setSavingExpense(true);
     try {
       const supabase = createClient();
-      const { data: session } = await supabase.auth.getSession();
-      const uid = session.session?.user.id;
-      if (!uid) return;
+      const { data: { user }, error: userErr } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) {
+        alert("Erro de autenticação");
+        console.error(userErr);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("fixed_expenses")
-        .insert({ uid, name: newExpense.name, amount: parseFloat(newExpense.amount), category: newExpense.category })
+        .insert({ uid, name: newExpense.name, amount: parseFloat(newExpense.amount.replace(',', '.')), category: newExpense.category })
         .select()
         .single();
-      if (!error && data) {
+        
+      if (error) {
+        alert("Erro ao adicionar: " + error.message);
+        console.error("Insert error:", error);
+        return;
+      }
+      
+      if (data) {
         setFixedExpenses([...fixedExpenses, data]);
         setNewExpense({ name: "", amount: "", category: "moradia" });
         setShowAdd(false);

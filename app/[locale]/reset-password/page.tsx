@@ -28,8 +28,8 @@ export default function ResetPasswordPage() {
     );
 
     // 2. Handle PKCE flow: session already exists from /api/auth/callback
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setReady(true);
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setReady(true);
     });
 
     return () => subscription.unsubscribe();

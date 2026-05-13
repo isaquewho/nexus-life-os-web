@@ -47,19 +47,31 @@ export default function GoalsPage() {
     setSaving(true);
     try {
       const supabase = createClient();
-      const { data: session } = await supabase.auth.getSession();
-      const uid = session.session?.user.id ?? "";
+      const { data: { user }, error: userErr } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) {
+        alert("Erro de autenticação");
+        console.error(userErr);
+        return;
+      }
       const { data, error } = await supabase.from("goals").insert({
         uid,
         name: newGoal.name,
         category: newGoal.category,
         emoji: GOAL_EMOJIS[newGoal.category] || "🎯",
-        target_amount: parseFloat(newGoal.target_amount),
+        target_amount: parseFloat(newGoal.target_amount.replace(',', '.')),
         saved_amount: 0,
         deadline: newGoal.deadline || null,
-        monthly_planned: parseFloat(newGoal.monthly_planned) || 0,
+        monthly_planned: parseFloat(newGoal.monthly_planned.replace(',', '.')) || 0,
       }).select().single();
-      if (!error && data) {
+      
+      if (error) {
+        alert("Erro ao criar meta: " + error.message);
+        console.error("Insert error:", error);
+        return;
+      }
+      
+      if (data) {
         setGoals([data, ...goals]);
         setShowAdd(false);
         setNewGoal({ name: "", category: "outros", emoji: "🎯", target_amount: "", deadline: "", monthly_planned: "" });
@@ -72,14 +84,25 @@ export default function GoalsPage() {
     setSavingContrib(true);
     try {
       const supabase = createClient();
-      const { data: session } = await supabase.auth.getSession();
-      const uid = session.session?.user.id ?? "";
-      const amount = parseFloat(contribAmount);
+      const { data: { user }, error: userErr } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) {
+        alert("Erro de autenticação");
+        console.error(userErr);
+        return;
+      }
+      const amount = parseFloat(contribAmount.replace(',', '.'));
 
-      await Promise.all([
+      const [contribRes, updateRes] = await Promise.all([
         supabase.from("goal_contributions").insert({ goal_id: goalId, uid, amount, note: contribNote || null, date: new Date().toISOString().split("T")[0] }),
         supabase.from("goals").update({ saved_amount: (goals.find(g => g.id === goalId)?.saved_amount ?? 0) + amount }).eq("id", goalId),
       ]);
+
+      if (contribRes.error || updateRes.error) {
+        alert("Erro ao adicionar contribuição.");
+        console.error("Contrib error:", contribRes.error, updateRes.error);
+        return;
+      }
 
       setGoals(goals.map(g => g.id === goalId ? { ...g, saved_amount: g.saved_amount + amount } : g));
       setShowContrib(null);

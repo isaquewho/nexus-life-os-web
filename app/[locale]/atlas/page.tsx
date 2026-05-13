@@ -238,8 +238,19 @@ export default function AtlasPage() {
 
     try {
       const supabase = createClient();
-      const { data: session } = await supabase.auth.getSession();
-      const uid = session.session?.user.id ?? "";
+      const { data: { user }, error: userErr } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) {
+        addMessage({
+          id: crypto.randomUUID(),
+          role: "atlas",
+          content: "❌ Erro de autenticação. Por favor, faça login novamente.",
+          created_at: new Date().toISOString(),
+        });
+        console.error(userErr);
+        setTyping(false);
+        return;
+      }
 
       const intent = parseMessage(msg);
 

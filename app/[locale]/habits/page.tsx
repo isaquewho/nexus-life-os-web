@@ -102,15 +102,25 @@ export default function HabitsPage() {
 
   const handleToggle = async (habit: Habit) => {
     const supabase = createClient();
-    const { data: session } = await supabase.auth.getSession();
-    const uid = session.session?.user.id ?? "";
+    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+    const uid = user?.id;
+    if (!uid) {
+      alert("Erro de autenticação");
+      console.error(userErr);
+      return;
+    }
     const existing = logs.find(l => l.habit_id === habit.id && l.date_key === dateKey);
     const newVal = existing ? !existing.completed : true;
 
-    await supabase.from("habit_logs").upsert(
+    const { error } = await supabase.from("habit_logs").upsert(
       { habit_id: habit.id, uid, date_key: dateKey, completed: newVal, logged_at: new Date().toISOString() },
       { onConflict: "habit_id,date_key" }
     );
+    if (error) {
+      alert("Erro ao salvar log: " + error.message);
+      console.error("Upsert error:", error);
+      return;
+    }
 
     setLogs(logs.map(l => l.habit_id === habit.id && l.date_key === dateKey
       ? { ...l, completed: newVal }
@@ -128,12 +138,25 @@ export default function HabitsPage() {
     setSaving(true);
     try {
       const supabase = createClient();
-      const { data: session } = await supabase.auth.getSession();
-      const uid = session.session?.user.id ?? "";
+      const { data: { user }, error: userErr } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) {
+        alert("Erro de autenticação");
+        console.error(userErr);
+        return;
+      }
+      
       const { data, error } = await supabase.from("habits")
         .insert({ uid, ...newHabit })
         .select().single();
-      if (!error && data) {
+        
+      if (error) {
+        alert("Erro ao criar hábito: " + error.message);
+        console.error("Insert error:", error);
+        return;
+      }
+      
+      if (data) {
         setHabits([...habits, data]);
         setShowAdd(false);
         setNewHabit({ name: "", emoji: "🎯", color: "#8b5cf6", frequency: "daily", xp_value: 30 });
