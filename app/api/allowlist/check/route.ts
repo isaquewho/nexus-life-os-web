@@ -21,11 +21,11 @@ export async function POST(request: NextRequest) {
     .from("allowed_emails")
     .select("email")
     .eq("email", email)
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ allowed: Boolean(data) });
+  return NextResponse.json({ allowed: Boolean(data && data.length > 0) });
 }
