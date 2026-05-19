@@ -55,14 +55,19 @@ export default function FinancePage() {
   useEffect(() => {
     const supabase = createClient();
     const load = async () => {
-      const [cfg, fx, txns] = await Promise.all([
+      const [cfg, fx, txnsRes] = await Promise.all([
         supabase.from("financial_config").select("*").single(),
         supabase.from("fixed_expenses").select("*"),
-        supabase.from("transactions").select("*").order("date", { ascending: false }).limit(50),
+        fetch("/api/transactions"),
       ]);
       if (cfg.data) setConfig(cfg.data);
       if (fx.data) setFixedExpenses(fx.data);
-      if (txns.data) setTransactions(txns.data);
+      if (txnsRes.ok) {
+        const { data } = await txnsRes.json();
+        if (data) setTransactions(data);
+      } else {
+        console.error("[finance] transactions load error:", txnsRes.statusText);
+      }
     };
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,55 +80,45 @@ export default function FinancePage() {
     if (!newTxn.description || !newTxn.amount) return;
     setSaving(true);
     try {
-      const supabase = createClient();
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      const uid = user?.id;
-      if (!uid) {
-        alert("Erro de autenticação: Usuário não encontrado.");
-        console.error("Auth error:", userError);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("transactions")
-        .insert({
-          uid,
+      const res = await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           description: newTxn.description,
-          amount: parseFloat(newTxn.amount.replace(',', '.')),
+          amount: newTxn.amount,
           category: newTxn.category,
           type: newTxn.type,
           date: newTxn.date,
-          source: "manual",
           transaction_layer: newTxn.layer,
           is_recurring: newTxn.isRecurring,
           recurring_day: newTxn.isRecurring ? newTxn.recurringDay : null,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        alert("Erro ao adicionar transação: " + error.message);
-        console.error("Insert error:", error);
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert("Erro ao adicionar transação: " + (json.error ?? res.statusText));
+        console.error("[finance] POST error:", json);
         return;
       }
-
-      if (data) {
-        setTransactions([data, ...transactions]);
-        setShowAddTxn(false);
-        setNewTxn({
-          description: "", amount: "", category: "outros",
-          type: "expense", date: new Date().toISOString().split("T")[0], layer: "variable",
-          isRecurring: false, recurringDay: new Date().getDate(),
-        });
-      }
+      setTransactions([json.data, ...transactions]);
+      setShowAddTxn(false);
+      setNewTxn({
+        description: "", amount: "", category: "outros",
+        type: "expense", date: new Date().toISOString().split("T")[0], layer: "variable",
+        isRecurring: false, recurringDay: new Date().getDate(),
+      });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    const supabase = createClient();
-    await supabase.from("transactions").delete().eq("id", id);
+    const res = await fetch(`/api/transactions?id=${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      console.error("[finance] DELETE error:", json);
+      return;
+    }
     setTransactions(transactions.filter((t) => t.id !== id));
   };
 

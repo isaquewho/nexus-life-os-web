@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useHabitStore } from "@/stores/habitStore";
-import { createClient } from "@/lib/supabase/client";
 import GlassCard from "@/components/ui/GlassCard";
 import NexusButton from "@/components/ui/NexusButton";
 import { formatDateKey } from "@/lib/utils";
@@ -78,14 +77,16 @@ export default function HabitsPage() {
   const today = formatDateKey();
 
   useEffect(() => {
-    const supabase = createClient();
     const load = async () => {
-      const [habs, hlogs] = await Promise.all([
-        supabase.from("habits").select("*").eq("is_active", true),
-        supabase.from("habit_logs").select("*"),
-      ]);
-      if (habs.data) setHabits(habs.data);
-      if (hlogs.data) setLogs(hlogs.data);
+      const res = await fetch("/api/habits");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error("[habits] load error:", err.error ?? res.statusText);
+        return;
+      }
+      const { habits: habs, logs: hlogs } = await res.json();
+      if (habs) setHabits(habs);
+      if (hlogs) setLogs(hlogs);
     };
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -101,31 +102,24 @@ export default function HabitsPage() {
   const monthPercent = totalPossible > 0 ? Math.round((monthLogs.filter(l => l.completed).length / totalPossible) * 100) : 0;
 
   const handleToggle = async (habit: Habit) => {
-    const supabase = createClient();
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
-    const uid = user?.id;
-    if (!uid) {
-      alert("Erro de autenticação");
-      console.error(userErr);
-      return;
-    }
     const existing = logs.find(l => l.habit_id === habit.id && l.date_key === dateKey);
     const newVal = existing ? !existing.completed : true;
 
-    const { error } = await supabase.from("habit_logs").upsert(
-      { habit_id: habit.id, uid, date_key: dateKey, completed: newVal, logged_at: new Date().toISOString() },
-      { onConflict: "habit_id,date_key" }
-    );
-    if (error) {
-      alert("Erro ao salvar log: " + error.message);
-      console.error("Upsert error:", error);
+    const res = await fetch("/api/habit-logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ habit_id: habit.id, date_key: dateKey, completed: newVal }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      alert("Erro ao salvar log: " + (json.error ?? res.statusText));
+      console.error("[habits] toggle error:", json);
       return;
     }
 
-    setLogs(logs.map(l => l.habit_id === habit.id && l.date_key === dateKey
-      ? { ...l, completed: newVal }
-      : l
-    ).concat(existing ? [] : [{ id: crypto.randomUUID(), habit_id: habit.id, uid, date_key: dateKey, completed: newVal, logged_at: new Date().toISOString() }]));
+    setLogs(logs.map(l =>
+      l.habit_id === habit.id && l.date_key === dateKey ? { ...l, completed: newVal } : l
+    ).concat(existing ? [] : [json.data]));
 
     if (newVal) {
       setXpPopId(habit.id);
@@ -137,30 +131,20 @@ export default function HabitsPage() {
     if (!newHabit.name) return;
     setSaving(true);
     try {
-      const supabase = createClient();
-      const { data: { user }, error: userErr } = await supabase.auth.getUser();
-      const uid = user?.id;
-      if (!uid) {
-        alert("Erro de autenticação");
-        console.error(userErr);
+      const res = await fetch("/api/habits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newHabit),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert("Erro ao criar hábito: " + (json.error ?? res.statusText));
+        console.error("[habits] POST error:", json);
         return;
       }
-      
-      const { data, error } = await supabase.from("habits")
-        .insert({ uid, ...newHabit })
-        .select().single();
-        
-      if (error) {
-        alert("Erro ao criar hábito: " + error.message);
-        console.error("Insert error:", error);
-        return;
-      }
-      
-      if (data) {
-        setHabits([...habits, data]);
-        setShowAdd(false);
-        setNewHabit({ name: "", emoji: "🎯", color: "#8b5cf6", frequency: "daily", xp_value: 30 });
-      }
+      setHabits([...habits, json.data]);
+      setShowAdd(false);
+      setNewHabit({ name: "", emoji: "🎯", color: "#8b5cf6", frequency: "daily", xp_value: 30 });
     } finally { setSaving(false); }
   };
 

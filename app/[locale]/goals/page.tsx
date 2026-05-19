@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useGoalStore } from "@/stores/goalStore";
-import { createClient } from "@/lib/supabase/client";
 import GlassCard from "@/components/ui/GlassCard";
 import NexusButton from "@/components/ui/NexusButton";
 import { formatCurrency, monthsUntil, progressPercent } from "@/lib/utils";
@@ -28,9 +27,14 @@ export default function GoalsPage() {
   const [savingContrib, setSavingContrib] = useState(false);
 
   useEffect(() => {
-    const supabase = createClient();
     const load = async () => {
-      const { data } = await supabase.from("goals").select("*").order("created_at", { ascending: false });
+      const res = await fetch("/api/goals");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error("[goals] load error:", err.error ?? res.statusText);
+        return;
+      }
+      const { data } = await res.json();
       if (data) setGoals(data);
     };
     load();
@@ -46,36 +50,26 @@ export default function GoalsPage() {
     if (!newGoal.name || !newGoal.target_amount) return;
     setSaving(true);
     try {
-      const supabase = createClient();
-      const { data: { user }, error: userErr } = await supabase.auth.getUser();
-      const uid = user?.id;
-      if (!uid) {
-        alert("Erro de autenticação");
-        console.error(userErr);
+      const res = await fetch("/api/goals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newGoal.name,
+          category: newGoal.category,
+          target_amount: newGoal.target_amount,
+          deadline: newGoal.deadline || null,
+          monthly_planned: newGoal.monthly_planned || 0,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert("Erro ao criar meta: " + (json.error ?? res.statusText));
+        console.error("[goals] POST error:", json);
         return;
       }
-      const { data, error } = await supabase.from("goals").insert({
-        uid,
-        name: newGoal.name,
-        category: newGoal.category,
-        emoji: GOAL_EMOJIS[newGoal.category] || "🎯",
-        target_amount: parseFloat(newGoal.target_amount.replace(',', '.')),
-        saved_amount: 0,
-        deadline: newGoal.deadline || null,
-        monthly_planned: parseFloat(newGoal.monthly_planned.replace(',', '.')) || 0,
-      }).select().single();
-      
-      if (error) {
-        alert("Erro ao criar meta: " + error.message);
-        console.error("Insert error:", error);
-        return;
-      }
-      
-      if (data) {
-        setGoals([data, ...goals]);
-        setShowAdd(false);
-        setNewGoal({ name: "", category: "outros", emoji: "🎯", target_amount: "", deadline: "", monthly_planned: "" });
-      }
+      setGoals([json.data, ...goals]);
+      setShowAdd(false);
+      setNewGoal({ name: "", category: "outros", emoji: "🎯", target_amount: "", deadline: "", monthly_planned: "" });
     } finally { setSaving(false); }
   };
 
@@ -83,28 +77,23 @@ export default function GoalsPage() {
     if (!contribAmount) return;
     setSavingContrib(true);
     try {
-      const supabase = createClient();
-      const { data: { user }, error: userErr } = await supabase.auth.getUser();
-      const uid = user?.id;
-      if (!uid) {
-        alert("Erro de autenticação");
-        console.error(userErr);
+      const currentGoal = goals.find(g => g.id === goalId);
+      const res = await fetch(`/api/goals/${goalId}/contributions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: contribAmount,
+          note: contribNote || null,
+          current_saved: currentGoal?.saved_amount ?? 0,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert("Erro ao adicionar contribuição: " + (json.error ?? res.statusText));
+        console.error("[goals] contrib error:", json);
         return;
       }
-      const amount = parseFloat(contribAmount.replace(',', '.'));
-
-      const [contribRes, updateRes] = await Promise.all([
-        supabase.from("goal_contributions").insert({ goal_id: goalId, uid, amount, note: contribNote || null, date: new Date().toISOString().split("T")[0] }),
-        supabase.from("goals").update({ saved_amount: (goals.find(g => g.id === goalId)?.saved_amount ?? 0) + amount }).eq("id", goalId),
-      ]);
-
-      if (contribRes.error || updateRes.error) {
-        alert("Erro ao adicionar contribuição.");
-        console.error("Contrib error:", contribRes.error, updateRes.error);
-        return;
-      }
-
-      setGoals(goals.map(g => g.id === goalId ? { ...g, saved_amount: g.saved_amount + amount } : g));
+      setGoals(goals.map(g => g.id === goalId ? { ...g, saved_amount: json.new_saved } : g));
       setShowContrib(null);
       setContribAmount("");
       setContribNote("");
